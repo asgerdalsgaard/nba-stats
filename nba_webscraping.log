@@ -1,0 +1,29 @@
+── Attaching packages ─────────────────────────────────────── tidyverse 1.3.1 ──
+✔ ggplot2 3.4.0     ✔ purrr   0.3.4
+✔ tibble  3.1.8     ✔ dplyr   1.0.9
+✔ tidyr   1.2.0     ✔ stringr 1.4.0
+✔ readr   2.1.2     ✔ forcats 0.5.1
+── Conflicts ────────────────────────────────────────── tidyverse_conflicts() ──
+✖ dplyr::filter()         masks stats::filter()
+✖ readr::guess_encoding() masks rvest::guess_encoding()
+✖ dplyr::lag()            masks stats::lag()
+[[1]]
+[1] "rvest"     "stats"     "graphics"  "grDevices" "utils"     "datasets" 
+[7] "methods"   "base"     
+
+[[2]]
+ [1] "forcats"   "stringr"   "dplyr"     "purrr"     "readr"     "tidyr"    
+ [7] "tibble"    "ggplot2"   "tidyverse" "rvest"     "stats"     "graphics" 
+[13] "grDevices" "utils"     "datasets"  "methods"   "base"     
+
+Advarselsbeskeder:
+1: pakke 'ggplot2' blev bygget under R version 4.2.2 
+2: pakke 'tibble' blev bygget under R version 4.2.2 
+Der var 28 advarsler (brug warnings() for at se dem)
+Fejl i file(file, ifelse(append, "a", "w")) : 
+  kan ikke åbne forbindelsen
+Kald: write.table -> file
+In addition: Advarselsbesked:
+I file(file, ifelse(append, "a", "w")) :
+  kan ikke åbne fil 'players.csv': Permission denied
+Kørsel stoppet

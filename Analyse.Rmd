@@ -1,0 +1,273 @@
+---
+title: "NBA-statistikker 2022/2023"
+author: "Asger Dalsgaard"
+date: "2023-01-12"
+output:
+  html_document:
+    toc: yes
+    toc_depth: 2
+  pdf_document:
+    toc: yes
+    toc_depth: '2'
+#subtitle: Ekstra
+---
+
+```{r setup, echo=FALSE}
+knitr::opts_chunk$set(echo = F, warning = F, messages = F, collapse = T, fig.width = 12, fig.height = 8)
+#include = F fjerner kode og resultater, echol = F fjerner kode men ikke resultater, message = F fjerner beskeder fra kode, warning = F fjerner warnings 
+```
+
+## Introduktion
+Data på spillere er scrapet fra ESPN og hold-statistikker er scrapet fra Basketball-reference. Tallene er fra søndag d. 8. januar og kan opdateres på 2 minutter. Jeg har kun lavet, det jeg lige kunne komme i tanke om. Masser af muligheder! 
+
+
+```{r, include = F}
+lapply(c("tidyverse","BasketballAnalyzeR","fmsb", "RColorBrewer"), library, character.only = TRUE)
+
+tadd <- Tadd %>% select(-Rank,-Playoff) %>% mutate(Team=case_when(Team == "LA Clippers" ~ "Los Angeles Clippers", 
+                                                                  TRUE ~ as.character(Team))) #fra basketballAnalyzer pakke
+player <- read_csv("players.csv") %>% rename(Team = team) %>% 
+            mutate(Team=case_when(Team == "LA Clippers" ~ "Los Angeles Clippers", 
+                                                   TRUE ~ as.character(Team))) %>% 
+              left_join(tadd, by = c("Team"="Team"), suffix = c("long", "_abb"))
+tbox <- read_csv("tbox.csv") %>% left_join(tadd, by = c("Team"="Team"), suffix = c("long", "_abb"))#pr game
+obox <- read_csv("obox.csv") %>% left_join(tadd, by = c("Team"="Team"), suffix = c("long", "_abb"))#pr game
+pbox <- read_csv("pbox.csv") %>% left_join(player, by = c("Name"="name"))#pr game
+```
+
+
+> "One of those idiots, who believe in analytics... 
+  I always believed analytics are crap"
+>
+> --- Charles Barkley 
+
+<br>
+
+## Stjerner og superstjerner
+En række plots med fokus på de bedst performende spillere på en række forskellige parametre
+
+
+### Scoring champs
+
+```{r}
+pbox %>% 
+    dplyr::filter(PTS>25) %>% 
+      ggplot(aes(x=MIN, y=PTS/MIN, label=Name))+geom_text() +
+        labs(x = "Minutter/kamp", y = "Point/minut") +
+          theme_classic(base_size=25)
+```
+
+Plottet viser alle spillere, der scorer minimum 25p per kamp. I stedet for samlede antal point, korrigerer y-aksen for antal spillede minutter. Giannis er i denne optik den mest scorende spiller målt per spillet minut, tæt efterfulgt af Embiid og Doncic, som dog spiller en hel del flere minutter. 
+
+<hr>
+
+### Effektivitet: Effective field goal percentage
+Ovenstående tager dog ikke højde for effektiviteten, men det gør nedenstående. Og her er billedet noget anerledes: Godt argument for at Jokic er sæsonens nuværende MPV. Kevin Durant holder til gengæld en høj eFG% SELVOM han spiller markant flere minutter end både Jokic/Curry/Williamson.
+
+```{r}
+
+pbox %>% dplyr::filter(PTS>25) %>% 
+  ggplot(aes(x=MIN, y=Shoot_eff, label=Name))+geom_text() +
+  labs(x = "Minutter/kamp", y = "eFG%") +
+  theme_classic(base_size=25)
+
+```
+
+<br>
+<hr>
+
+## Turnovers og assists 
+
+```{r}
+pbox %>% dplyr::filter(AST>6) %>% 
+  ggplot(aes(x=AST/MIN, y=TO/MIN, label=Name))+
+  geom_text(check_overlap = TRUE) +
+  labs(x = "Assists/min", y = "Turnovers/min") +
+  xlim(0.15,0.32) +
+  theme_classic(base_size=25)
+```
+Kigger man kun på assists, er Haliburton faktisk den bedst afleverende spiller målt pr minut spillet - imponerende!
+Westbrook kunne ånde lettet op, hvis man kiggede på assists per kamp, men som bænkspiller får han færre minuter. Kigger man på turnovers per spillet minut ligger han øverst... . 
+
+<br>
+
+## Holdprofiler: Hvem gør hvad?
+Nedenstående plots hedder "spiderwebs". Et web viser de 5 spillere fra et hold, som spiller flest minutter pr kamp (det vil typisk være starting lineup).
+Alle statistikker er korrigeret per spillet minut (dette kan selvfølgelig gøres pr kamp eller bare overall). Akserne er fastsat ud fra den spiller på holdet, som har leveret henholdsvis højest og lavest i den pågældende statistik. Grafen viser altså hvordan spillerne på holdet klarer sig INTERNT - ikke generelt i ligaen. 
+Akserne er standardiserede, således korrigeres der for at ouputtet i nogle kategorier er lavere end andre (fx er blocks og steals meget mindre hyppige end scorede points). Det kan naturlivis diskuteres, hvordan output for hver statistik skal vægte.
+
+Jeg har valgt følgende statistikker (alle per spillet minut): Assists, Steals, Blocks, Rebounds, Turnovers, Points (overall) og 3-pointscoringer, 
+
+```{r, include = F}
+radarplot <- function(i){ #5 mest spillende spilleres statistikker pr minut standardiserede 
+radar <- pbox %>% 
+  mutate(Assists = scale(AST/MIN, center = T),
+         Points = scale(PTS/MIN, center = T), 
+         P3 = scale(P3M/MIN, center = T),
+         Turnovers = scale(TO/MIN, center = T), 
+         Rebounds = scale(REB/MIN, center = T), 
+         Blocks = scale(BLK/MIN, center = T),
+         Steals = scale(STL/MIN, center = T)) %>%  
+  filter(Team == i) %>% slice_max(MIN, n = 5) %>% 
+  select(Name, Assists, Points, Turnovers, Rebounds, P3, Blocks, Steals) %>% as.data.frame()
+rownames(radar) <- radar[,1]
+radar <- radar[,-1]
+
+radar <- rbind(apply(radar, 2, max), #fmsb SKAL have max og min i første og andet row. Super dumt
+               apply(radar, 2, min),
+               radar)
+
+#colors
+radarchart(radar, axistype=0,
+           plwd=2, plty = 1,#polygon border size,linjetype 
+           pcol = brewer.pal(5,"Set1"), #polygon border color
+           pfcol = alpha(brewer.pal(5, "Set1"),0.3), #polygon farve 
+           cglty = 1, cglwd = 1, #spiderweb line type, line thickness 
+           vlcex=1.3, title = i) #var labs size 
+legend(x=1.1, y=0.6, bty="n",  #legend position, title, bty er box around legend "n" er no 
+       col = alpha(brewer.pal(5, "Set1"),0.6), pch=20, #legend colors (skal være samme som pcol/pfcol), pch er label type 
+       legend = rownames(radar[-c(1,2),]), #rownames fra data 
+       cex=1.2, pt.cex=2) #legend size,
+}
+```
+
+
+```{r}
+radarplot("Boston Celtics")
+```
+
+Kigger man på Boston, er det ikke overaskende, at Tatum og Brown dominerer i flere statistikker. Det er tilgengæld Smart, som laver flest assists og steals. Han laver også en del turnovers. Al Horford stikker lidt i mange retninger. Særligt blocks, men også rebounds og 3-pointsscoringer
+<br>
+<hr>
+
+```{r}
+radarplot("Denver Nuggets")
+```
+
+Jokic er stukket helt af, selvom der er flere gode spillere. Kun på 3-pointscoringer tager han sig en slapper. Dermed slipper han også for at løbe aaaaaalt for meget mellem kurven og 3-pointslinjen.
+
+<hr>
+
+
+
+```{r}
+radarplot("Los Angeles Lakers")
+```
+Uden Lebron og Day-To-Davies er Lakers ikke meget:
+
+
+```{r}
+radarplot("Milwaukee Bucks")
+```
+Milwaukee har omvendt et meget mere afbalanceret hold: Selvom Giannis gør det mest, får han markant hjælp fra Holiday, Portis og Lopez. Bemærk at Middleton ikke engang er 5. mest spillede spiller. De ser stærke ud. 
+Lidt i stil med Milwaukke, har Pelicans også mange spillere, som leverer:
+
+```{r}
+radarplot("New Orleans Pelicans")
+```
+
+Brooklyn Nets har fået det de ønskede fra Ben Simmons. Forsvaret klarer ham og Claxton, imens Nr11 og Durant tager sig af klart de fleste point. Lige nu er "på pairet" blevet til virkelighed.  
+
+```{r}
+radarplot("Brooklyn Nets")
+radarplot("Philadelphia 76ers")
+```
+
+
+
+## Holdrankings
+
+### Offensive/defensive rating
+
+Bemærk at y-aksen med defensive rating er reversed: Lav defensive rating er bedst! 
+Boston stikker helt af. 
+
+```{r}
+tbox_ff <- tbox %>% select(Team, P2A, P2M,P3A,P3M,FTA,FTM=FT,OREB=ORB,DREB=DRB,TOV,MIN=MP)
+obox_ff <- obox %>% select(Team, P2A, P2M,P3A,P3M,FTA,FTM=FT,OREB=ORB,DREB=DRB,TOV,MIN=MP)
+ff <- fourfactors(tbox_ff, obox_ff) %>% left_join(tadd, by = c("Team"="Team"))
+
+ff %>% 
+  ggplot(aes(x=ORtg, y=DRtg, label = team, color = Conference)) + 
+  geom_text(size=4) +
+  labs(x="Offensive rating",y="Defensive rating") +
+  scale_color_discrete(labels=c("East","West")) +
+  scale_y_reverse() +
+  theme_classic(base_size=20)
+```
+
+### Offensive og defensive pace
+
+```{r}
+ff %>% 
+  ggplot(aes(x=PACE.Off, y=PACE.Def, label = team, color = Conference)) + 
+  geom_text(size=4) +
+  labs(x="Offensive pace",y="Defensive pace") +
+  scale_color_discrete(labels=c("East","West"))+
+  theme_classic(base_size=20)
+```
+
+Antal boldbesiddelser igennem en kamp. Chicago, San Antonis og Atlanta har skruet op for tempoet, i BEGGE ender! 
+Dallas ligger lavet i offensive pace, måske fordi Luca tager det stille og roligt og holder tempoet som det passer ham. 
+
+<br>
+
+## Generelle spillerstatistikker
+Statistikkerne for spillerkarakteristika er opdelt på hold, men kan også laves for fx position på banen. 
+
+### Højde
+```{r height}
+player %>% 
+  group_by(team, Conference) %>% 
+    summarize(height_gns = mean(height, na.rm=TRUE), 
+              height_stddev = sd(height, na.rm=TRUE)) %>% 
+    ggplot(aes(x = fct_reorder(team, height_gns), y = height_gns, color = Conference)) + 
+    geom_point(size=4) + 
+    coord_flip()+
+      labs(x="Team",y="Højde (cm)") +
+    theme_linedraw(base_size=22) + 
+      scale_color_discrete(labels=c("East","West"))
+
+```
+
+
+
+### Drøjde
+Ved at tage højde for spillerens vægt, korrigeres grafen for højde her til "drøjde": "Hvor mange kilo vejer spillerne i gennemsnit pr centimeter?
+
+```{r masse}
+player %>% 
+  group_by(team, Conference) %>% 
+  summarize(mass = mean(weight/height, na.rm=TRUE), 
+            mass_stddev = sd(weight/height, na.rm=TRUE)) %>% 
+  ggplot(aes(x = fct_reorder(team, mass), y = mass, color = Conference)) + 
+  geom_point(size=4) + 
+  coord_flip()+
+  labs(x="Team",y="Drøjde (kg/cm)") +
+  scale_color_discrete(labels=c("East","West")) +
+  theme_linedraw(base_size=22)
+```
+
+OKC-spillerne var det andet højeste hold, men i drøjde er de klart mindst. Givetvis fordi de er så unge og splejsede! 
+
+<br>
+
+Gennemsnitslønnen for holdenes spillere. Holdene med de store stjerner, ligger selvfølgelig i toppen. Måske lidt overraskende ligger Dallas meget højt? 
+
+```{r}
+player %>% 
+  group_by(team, Conference) %>% 
+  summarize(salary = mean(salary, na.rm=TRUE), 
+            salary_stddev = sd(salary, na.rm=TRUE)) %>% 
+  ggplot(aes(x = fct_reorder(team, salary), y = salary, color = Conference)) + 
+  geom_point(size=4) + 
+  coord_flip()+
+  labs(x="Team",y="$") +
+  theme_linedraw(base_size=25) +
+  scale_y_continuous(labels = scales::number_format(accuracy = 1000)) +
+  scale_color_discrete(labels=c("East","West"))
+```
+
+
+
+
